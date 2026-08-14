@@ -19,7 +19,7 @@ teacher_student_pipe = [
         "as": "school_students"     ### muss anderen namen haben, da sonst dieses lookup das vorherige überschreibt
     }},
     {"$project": {
-        "name" :1,
+        "name" : 1,
         "anzahl_aktive_lehrer": {
         "$size": {
             "$filter": {
@@ -38,6 +38,7 @@ teacher_student_pipe = [
                 }
             }
         },
+        "created_at": 1,
         "_id": 1
     }},
     # {"$sort": {
@@ -104,7 +105,6 @@ message_pipe = [
             1,
             0
         ]
-    
     }
 },
     }},
@@ -166,6 +166,30 @@ event_pipe_event = [
     }}
 ]
 
+event_pipe_category = [{
+    "$group": {
+        "_id": "$school",
+        "event_event": {
+            "$sum": {
+                "$cond": [{"$eq": ["$event_category", "event"]}, 1, 0]}
+        },
+        "holiday_event": {
+            "$sum": {
+                "$cond": [{"$eq": ["$event_category", "holiday"]}, 1,0]}
+        },
+        "task_event": {
+            "$sum": {
+                "$cond": [{"$eq": ["$event_category", "task"]}, 1, 0]}
+        },
+        "test_event": {
+            "$sum": {
+                "$cond": [{"$eq": ["$event_category", "test"]}, 1, 0]}
+            }
+        }
+    }
+]
+
+
 file_pipe = [
     {"$group": {
         "_id": "$school",
@@ -202,6 +226,28 @@ question_pipe = [
     }}
 ]
 
+status_pipe = [{
+    "$project": {
+        "loeschstatus": {
+        "$cond":[{"$ne": ["$deleted_at", None]},
+                "$deleted_at",
+                None]
+        },
+        "kuendigungsstatus": {
+            "$cond": [{"$ne": ["$invoicing_cancellation_date", None]},
+                        "$invoicing_cancellation_date",
+                        None]
+        },
+        "status": {
+            "$cond": [{"$eq": ["$deactivated", True]},
+                        "Deaktiviert",
+                        "Aktiv"]
+        },
+        "_id": 1
+    }
+}
+]
+
 #################################################
 # Pipeline list
 
@@ -211,5 +257,7 @@ pipeline_list = [
     (message_pipe, "notification"), 
     (event_pipe_meet, "event"),
     (event_pipe_event, "event"),
+    (event_pipe_category, "event"),
     (file_pipe, "file"),
-    (question_pipe, "question")]
+    (question_pipe, "question"),
+    (status_pipe, "school")]

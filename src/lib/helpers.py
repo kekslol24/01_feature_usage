@@ -20,3 +20,12 @@ def merge_alle(dataframes, on, how):
             df = df.drop(columns="name")
         result = merger(result, df, on, how)
     return result
+
+
+exception_cols = [
+    "name", 
+    "joker_tage_aktiviert", 
+    "created_at", 
+    "loeschstatus", 
+    "kuendigungsstatus", 
+    "status"]

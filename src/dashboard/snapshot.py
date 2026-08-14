@@ -18,17 +18,23 @@ pipeline_list = pipelines.pipeline_list
 
 def main():
     all_dfs = []
+    ### create df from pipes, collections and db
     for pipe, collection in pipeline_list:
         df = helpers.df_creator(db, collection, pipe)
         all_dfs.append(df)
 
+    ### merge newly created df into one
     merged = helpers.merge_alle(all_dfs, on="_id", how="outer")
     merged = merged.drop(columns="_id")
-    exception_cols = ["name", "joker_tage_aktiviert"]
-    digit_cols = merged.columns.difference(exception_cols)
+
+    ### extract non digit columns
+    digit_cols = merged.columns.difference(helpers.exception_cols)
+
+    ### convert digit columns to int
     merged[digit_cols] = merged[digit_cols].fillna(0)
     merged[digit_cols] = merged[digit_cols].astype(int)
 
+    ### generate snapshot
     merged.to_parquet("data/snapshot.parquet", index=False)
 
 
