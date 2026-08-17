@@ -2,6 +2,41 @@
 Pipelines for data extraction for feature usage analysis.
 '''
 
+from src.lib import helpers
+from datetime import datetime, timedelta
+
+###########################################################################
+HEUTE = datetime.now()
+AKTUELLES_SCHULJAHR   = datetime(datetime.now().year, 7, 20)
+
+VOR_30_TAGEN = HEUTE - timedelta(days=30)
+VOR_30_TAGEN_PIPE = {"$gte": ["$created_at", VOR_30_TAGEN]}
+
+VOR_90_TAGEN = HEUTE - timedelta(days=90)
+VOR_90_TAGEN_PIPE = {"$gte": ["$created_at", VOR_90_TAGEN]}
+
+schuljahresende_dieses_jahr = datetime(HEUTE.year, 7, 20)
+
+if HEUTE > schuljahresende_dieses_jahr:
+    LETZTES_SCHULJAHR_START = datetime(HEUTE.year -1 , 8, 1)
+    LETZTES_SCHULJAHR_ENDE = datetime(HEUTE.year , 7, 20)
+else:
+    LETZTES_SCHULJAHR_START = datetime(HEUTE.year -2, 8, 1)
+    LETZTES_SCHULJAHR_ENDE = datetime(HEUTE.year -1, 7, 20)
+
+# LETZTES_SCHULJAHR_START = datetime(datetime.now().year - 1, 8, 1)
+# LETZTES_SCHULJAHR_ENDE = datetime(datetime.now().year, 7, 20)
+LETZTES_SCHULJAHR_PIPE = {"$and": [{"$gte": ["$created_at", LETZTES_SCHULJAHR_START]}, {"$lte": ["$created_at", LETZTES_SCHULJAHR_ENDE]}]}
+###########################################################################
+pipe_dict = {"30_tage": VOR_30_TAGEN_PIPE, "90_tage": VOR_90_TAGEN_PIPE, "letztes_schuljahr": LETZTES_SCHULJAHR_PIPE}
+
+# chat_pipe_dict = {}
+
+# for suffix, condition in pipe_dict.items():
+#     chat_pipe_dict[suffix] = {"$and": [condition, {"$eq": ["$is_chat", True]}]}      ----> because we append new values to the pipe_dict
+                                                                                        # it is no longer necessary
+###########################################################################
+
 teacher_student_pipe = [
     {"$match": {
         "deleted_at": {"$eq": None}
@@ -53,8 +88,8 @@ absence_pipe = [
     # {"$limit": 5},
     {"$group": {
         "_id": "$school",
-        "anzahl_absenz": {"$sum": 1},
-        "anzahl_joker_tage": {
+        "anzahl_absenz_historie": {"$sum": 1},
+        "anzahl_joker_tage_historie": {
             "$sum": {
                 "$cond": [
                     {"$eq": ["$is_joker_day", True]},
@@ -63,6 +98,7 @@ absence_pipe = [
                 ]
             }
         },
+        **helpers.timeframe_fields("absenz", pipe_dict)
     }},
     {"$lookup": {
         "from": "school",
@@ -81,8 +117,11 @@ absence_pipe = [
 },
         # "$school_info.client_name": 1
         "name": "$school_info.name",
-        "anzahl_absenz": 1,
-        "anzahl_joker_tage": 1,
+        "anzahl_absenz_30_tage": 1, 
+        "anzahl_absenz_90_tage": 1,
+        "anzahl_absenz_letztes_schuljahr": 1,
+        "anzahl_absenz_historie": 1,
+        "anzahl_joker_tage_historie": 1,
         "_id": 1
     # }},
     # {"$sort": {
@@ -97,8 +136,8 @@ absence_pipe = [
 message_pipe = [
     {"$group": {
     "_id": "$school",
-    "anzahl_notification": {"$sum": 1},
-    "davon_chat_nachricht": {
+    "anzahl_notification_historie": {"$sum": 1},
+    "davon_chat_nachricht_historie": {
     "$sum": {
         "$cond": [
             {"$eq": ["$is_chat", True]},
@@ -107,6 +146,8 @@ message_pipe = [
         ]
     }
 },
+    **helpers.timeframe_fields("nachrichten", pipe_dict),
+    **helpers.timeframe_fields("chat_nachrichten", helpers.cond_cat("is_chat", True, pipe_dict))
     }},
     {"$lookup": {
         "from": "school",
@@ -117,8 +158,14 @@ message_pipe = [
     {"$unwind": "$school_notification"},
     {"$project": {
         "name": "$school_notification.name",
-        "anzahl_notification": 1,
-        "davon_chat_nachricht": 1,
+        "anzahl_nachrichten_30_tage": 1,
+        "anzahl_nachrichten_90_tage": 1,
+        "anzahl_nachrichten_letztes_schuljahr": 1,
+        "anzahl_notification_historie": 1,
+        "anzahl_chat_nachrichten_30_tage": 1,
+        "anzahl_chat_nachrichten_90_tage": 1,
+        "anzahl_chat_nachrichten_letztes_schuljahr": 1,
+        "anzahl_chat_nachrichten_historie": 1,
         "_id": 1
     }}
 
@@ -130,7 +177,8 @@ event_pipe_meet = [
     }},
     {"$group": {
         "_id": "$school",
-        "anzahl_meetings": {"$sum": 1}
+        "anzahl_meetings_historie": {"$sum": 1},
+        **helpers.timeframe_fields("meetings", pipe_dict)
     }},
     {"$lookup": {
         "from": "school",
@@ -140,7 +188,10 @@ event_pipe_meet = [
     }},
     {"$project": {
         "name": "$school_meet.name",
-        "anzahl_meetings": 1,
+        "anzahl_meetings_30_tage": 1,
+        "anzahl_meetings_90_tage": 1,
+        "anzahl_meetings_letztes_schuljahr": 1,
+        "anzahl_meetings_historie": 1,
         "_id": 1
     }}
 ]
@@ -151,7 +202,8 @@ event_pipe_event = [
     }},
     {"$group": {
         "_id": "$school",
-        "anzahl_events": {"$sum": 1}
+        "anzahl_events_historie": {"$sum": 1},
+        **helpers.timeframe_fields("events", pipe_dict)
     }},
     {"$lookup": {
         "from": "school",
@@ -161,7 +213,10 @@ event_pipe_event = [
     }},
     {"$project": {
         "name": "$school_event.name",
-        "anzahl_events": 1,
+        "anzahl_events_30_tage": 1,
+        "anzahl_events_90_tage": 1,
+        "anzahl_events_letztes_schuljahr": 1,
+        "anzahl_events_historie": 1,
         "_id": 1
     }}
 ]
@@ -169,22 +224,26 @@ event_pipe_event = [
 event_pipe_category = [{
     "$group": {
         "_id": "$school",
-        "event_event": {
+        "event_event_historie": {
             "$sum": {
                 "$cond": [{"$eq": ["$event_category", "event"]}, 1, 0]}
         },
-        "holiday_event": {
+        "holiday_event_historie": {
             "$sum": {
                 "$cond": [{"$eq": ["$event_category", "holiday"]}, 1,0]}
         },
-        "task_event": {
+        "task_event_historie": {
             "$sum": {
                 "$cond": [{"$eq": ["$event_category", "task"]}, 1, 0]}
         },
-        "test_event": {
+        "test_event_historie": {
             "$sum": {
                 "$cond": [{"$eq": ["$event_category", "test"]}, 1, 0]}
-            }
+        },
+        **helpers.timeframe_fields("event_event", helpers.cond_cat("event_category", "event", pipe_dict)),
+        **helpers.timeframe_fields("holiday_event", helpers.cond_cat("event_category", "holiday", pipe_dict)),
+        **helpers.timeframe_fields("task_event", helpers.cond_cat("event_category", "task", pipe_dict)),
+        **helpers.timeframe_fields("test_event", helpers.cond_cat("event_category", "test", pipe_dict))
         }
     }
 ]
@@ -193,7 +252,8 @@ event_pipe_category = [{
 file_pipe = [
     {"$group": {
         "_id": "$school",
-        "anzahl_dateien": {"$sum": 1}
+        "anzahl_dateien_historie": {"$sum": 1},
+        **helpers.timeframe_fields("files", pipe_dict)
     }},
     {"$lookup": {
         "from": "school",
@@ -203,7 +263,10 @@ file_pipe = [
     }},
     {"$project": {
         "name": "$school_files.name",
-        "anzahl_dateien": 1,
+        "anzahl_files_30_tage": 1,
+        "anzahl_files_90_tage": 1,
+        "anzahl_files_letztes_schuljahr": 1,
+        "anzahl_dateien_historie": 1,
         "_id": 1
     }}
 ]
@@ -211,7 +274,8 @@ file_pipe = [
 question_pipe = [
     {"$group": {
         "_id": "$school",
-        "anzahl_questions": {"$sum": 1}
+        "anzahl_questions_historie": {"$sum": 1},
+        **helpers.timeframe_fields("questions", pipe_dict)
     }},
     {"$lookup": {
         "from": "school",
@@ -221,7 +285,10 @@ question_pipe = [
     }},
     {"$project": {
         "name": "$school_question.name",
-        "anzahl_questions": 1,
+        "anzahl_questions_30_tage": 1,
+        "anzahl_questions_90_tage": 1,
+        "anzahl_questions_letztes_schuljahr": 1,
+        "anzahl_questions_historie": 1,
         "_id": 1
     }}
 ]

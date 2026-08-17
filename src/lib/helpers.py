@@ -22,6 +22,20 @@ def merge_alle(dataframes, on, how):
     return result
 
 
+def timeframe_fields(pre_fix, conditions, only_date=False):
+    '''Takes prefix and conditions, returns fields for pipeline.py'''
+    fields = {}
+    for suffix, condition in conditions.items():
+        fieldname = f"anzahl_{pre_fix}_{suffix}"
+        fields[fieldname] = {"$sum": {"$cond": [condition, 1, 0]}}
+    return fields
+
+def cond_cat(extra_field, extra_value, pipe_dict):
+    result = {}
+    for suffix, condition in pipe_dict.items():
+        result[suffix] =  {"$and": [condition, {"$eq": [f"${extra_field}", extra_value]}  ]}
+    return result
+
 exception_cols = [
     "name", 
     "joker_tage_aktiviert", 

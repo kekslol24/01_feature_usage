@@ -4,7 +4,7 @@ from src.lib import helpers
 import pymongo
 import os
 from dotenv import load_dotenv
-import pyarrow
+# import pyarrow
 
 load_dotenv()
 
