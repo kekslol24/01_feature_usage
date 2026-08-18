@@ -21,9 +21,6 @@ df["kuendigungsstatus"] = df["kuendigungsstatus"].dt.date
 df["loeschstatus"] = df["loeschstatus"].dt.date
 df = df.dropna(axis=0, how="all")
 
-non_relevant_cols = ["name", "joker_tage_aktiviert", "loeschstatus", "kuendigungsstatus", "status"]
-relevant_cols = df.columns.difference(non_relevant_cols)
-
 mask = (
     df["name"].isna() & 
     (df["status"] == "Deaktiviert") #&
@@ -39,13 +36,56 @@ st.logo(LOGO, size="large")
 
 ###### Initialize tabs
 
-tab1, tab2 = st.tabs(["Feature-Analyse", "Gesamtübersicht"])
+tab1, tab2, tab3 = st.tabs(["Gesamtübersicht", "Feature-Analyse", "Schule im Detail"], key="active_tab")
 
+###### column handling
+
+historie_col = df.columns[df.columns.str.contains("_historie")]
+removed_cols = ["anzahl_aktive_schüler", "anzahl_aktive_lehrer"]
+spalten_reihenfolge = [
+    "name", 
+    "created_at", 
+    "status", 
+    "kuendigungsstatus", 
+    "loeschstatus", 
+    "joker_tage_aktiviert"] + list(removed_cols) + list(historie_col) 
+
+non_relevant_cols = ["name", "joker_tage_aktiviert", "loeschstatus", "kuendigungsstatus", "status", "created_at"]
+relevant_cols = df.columns.difference(non_relevant_cols)
 
 with tab1:
+# ##### Creat searchbar for school name and plot overview table
+    # Set table layout = wide
+    st.set_page_config(layout="wide")
+
+    #### set session_state for click to tab 3 redirect
+    
+    merged_col = pd.Index.union(historie_col, non_relevant_cols)
+    overview_col = merged_col.union(removed_cols)
+
+    txt_input = st.text_input(label="Suchfeld",  key="Gesamtübersicht")
+    filtered = df[df["name"].str.contains(txt_input, case=False)]
+    df_cols = filtered[spalten_reihenfolge]
+    
+    # st.multiselect()
+
+    #### logic to set session_state to selected name in overview, of not selected return none so it resets
+    event = st.dataframe(df_cols, on_select="rerun", selection_mode="single-row", hide_index=True)
+    if event["selection"]["rows"]:
+        zeilen_index = event["selection"]["rows"][0]
+        selected_name = df_cols.iloc[zeilen_index]["name"]
+        st.session_state["selected_name"] = selected_name
+    else:
+        st.session_state["selected_name"] = None
+
+with tab2:
 
     ###### selectbox init
-    selectbox = st.selectbox("Zeitraum:", ["Letzte 30 Tage", "Letzte 90 Tage", "Letztes Schuljahr", "Gesamter Zeitraum"])
+    selectbox = st.selectbox("Zeitraum:", 
+                             ["Letzte 30 Tage", 
+                              "Letzte 90 Tage", 
+                              "Letztes Schuljahr", "Gesamter Zeitraum"
+                              ], key="Feature Analyse")
 
 
     ###### selectbox mapping timeframes
@@ -61,14 +101,12 @@ with tab1:
     suitable_cols = df.columns[df.columns.str.contains(searched_suffix)]
     searchbox_cols = df[suitable_cols]
 
-    st.write(selectbox)
-
     ###### Remove non int cols + Get total sum for overview 
     rest_cols = searchbox_cols.columns.difference(helpers.exception_cols)
     sum_digit_cols = searchbox_cols[rest_cols].sum().to_frame()
 
     ##### Reset index to avoid double index col for summmed feature chart, remove non important cols
-    removed_cols = ["anzahl_aktive_schüler", "anzahl_aktive_lehrer"]
+
     keep_cols = sum_digit_cols.columns.difference(removed_cols)
     filtered_df = sum_digit_cols[keep_cols]
     
@@ -80,19 +118,47 @@ with tab1:
     st.plotly_chart(fig)
     st.write(bar_df_filtered)
 
-with tab2:
-# ##### Creat searchbar for school name and plot overview table
-    # Set table layout = wide
-    st.set_page_config(layout="wide")
+with tab3:
+    ##### Initialize columns for widgets
+    col1, col2, col3, col4 ,col5 = st.columns(5)
 
-    historie_col = df.columns[df.columns.str.contains("_historie")]
-    merged_col = pd.Index.union(historie_col, non_relevant_cols)
-    overview_col = merged_col.union(removed_cols)
+    options = [""] + list(df_cols["name"].unique())
+    selected_school = st.selectbox("Schule suchen", options, key="Schule im Detail")
 
-    txt_input = st.text_input(label="Suchfeld")
-    filtered = df[df["name"].str.contains(txt_input)]
+    if st.session_state.get("selected_name") is not None:
+        name = df[df["name"] == st.session_state.get("selected_name")]
+        st.header(name.iloc[0]["name"])
+    else:
+        name = df_cols[df_cols["name"] == selected_school]
+        st.header(name.iloc[0]["name"])
+
+
+
+    if name.iloc[0]["status"] == "Aktiv":
+        st.success("Aktiv")
+    else:
+        st.error("Nicht Aktiv")
+
+
+    with col1:
+        st.metric("Aktive Lehrer", name.iloc[0]["anzahl_aktive_lehrer"])
+
+    with col2:
+        st.metric("Aktive Schüler", name.iloc[0]["anzahl_aktive_schüler"])
+
+    with col3:
+        if pd.isna(name.iloc[0]["kuendigungsstatus"]):
+            st.metric("Kündigungsstatus", "Nicht Gekündigt")
+        else:
+            datum = name.iloc[0]["kuendigungsstatus"]
+            st.metric("Kündigungsdatum", datum.strftime("%d.%m.%Y"))
+
+    # with col4: 
+    #     if pd.isna(name.iloc[0][""]):
+    #         pass
+
+    with col5:
+        formatted_currency = f"CHF {name.iloc[0]["anzahl_invoices_historie"]:,.2f}".replace(",", "'")
+        st.metric("Rechnungsbetrag (Historie)", formatted_currency)
     
-
-    st.dataframe(filtered, hide_index=True)
-
-    ######## next -> create only historie view for overview
+    st.dataframe(name, hide_index=True)

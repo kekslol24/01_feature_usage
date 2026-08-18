@@ -98,7 +98,8 @@ absence_pipe = [
                 ]
             }
         },
-        **helpers.timeframe_fields("absenz", pipe_dict)
+        **helpers.timeframe_fields("absenz", pipe_dict),
+        **helpers.timeframe_fields("joker_tage", pipe_dict)
     }},
     {"$lookup": {
         "from": "school",
@@ -315,6 +316,32 @@ status_pipe = [{
 }
 ]
 
+money_pipe = [{
+    "$group": {
+        "_id": "$school_id",
+        "anzahl_invoices_historie": {"$sum": "$amount"},
+        **helpers.timeframe_fields("invoices", pipe_dict, is_money=True)
+    }},
+    {"$lookup": {
+        "from": "school",
+        "localField": "_id",
+        "foreignField": "_id",
+        "as": "school_total"
+    }},
+    {"$unwind": "$school_total"},
+    {"$project": {
+        "_id": 1,
+        "anzahl_invoices_historie": 1,
+        "invoicing_start_date": "$school_total.invoicing_start_date",
+        "invoicing_cancellation_date": "$school_total.invoicing_cancellation_date",
+        "anzahl_invoices_30_tage": 1,
+        "anzahl_invoices_90_tage": 1,
+        "anzahl_invoices_letztes_schuljahr": 1,
+        "anzahl_invoices_historie": 1,
+    }
+}]
+
+
 #################################################
 # Pipeline list
 
@@ -327,4 +354,6 @@ pipeline_list = [
     (event_pipe_category, "event"),
     (file_pipe, "file"),
     (question_pipe, "question"),
-    (status_pipe, "school")]
+    (status_pipe, "school"),
+    (money_pipe, "invoices")
+    ]
