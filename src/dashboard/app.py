@@ -19,6 +19,8 @@ df = pd.read_parquet("../../data/snapshot.parquet")
 df["created_at"] = df["created_at"].dt.date
 df["kuendigungsstatus"] = df["kuendigungsstatus"].dt.date
 df["loeschstatus"] = df["loeschstatus"].dt.date
+df["invoicing_start_date"] = df["invoicing_start_date"].dt.date
+df["invoicing_cancellation_date"] = df["invoicing_cancellation_date"].dt.date
 df = df.dropna(axis=0, how="all")
 
 mask = (
@@ -41,11 +43,13 @@ tab1, tab2, tab3 = st.tabs(["Gesamtübersicht", "Feature-Analyse", "Schule im De
 ###### column handling
 
 historie_col = df.columns[df.columns.str.contains("_historie")]
-removed_cols = ["anzahl_aktive_schüler", "anzahl_aktive_lehrer"]
+removed_cols = ["anzahl_aktive_schüler", "anzahl_aktive_lehrer", "anzahl_aktive_eltern"]
 spalten_reihenfolge = [
     "name", 
     "created_at", 
-    "status", 
+    "status",
+    "invoicing_start_date",
+    "invoicing_cancellation_date", 
     "kuendigungsstatus", 
     "loeschstatus", 
     "joker_tage_aktiviert"] + list(removed_cols) + list(historie_col) 
@@ -53,10 +57,39 @@ spalten_reihenfolge = [
 non_relevant_cols = ["name", "joker_tage_aktiviert", "loeschstatus", "kuendigungsstatus", "status", "created_at"]
 relevant_cols = df.columns.difference(non_relevant_cols)
 
+    ###### selectbox mapping timeframes
+
+timeframes = {
+    "Letzte 30 Tage": "_30_tage",
+    "Letzte 90 Tage": "_90_tage",
+    "Letztes Schuljahr": "_letztes_schuljahr",
+    "Gesamter Zeitraum": "_historie"
+}
+
+
 with tab1:
 # ##### Creat searchbar for school name and plot overview table
     # Set table layout = wide
     st.set_page_config(layout="wide")
+
+    #### set up cols for overview widgets
+    col1, col2, col3, col4 = st.columns(4)
+    #### col for total active schools
+    with col1:
+        df_no_deleted = df.drop(columns="loeschstatus")
+        st.metric("Total aktive Schulen:", df_no_deleted[df_no_deleted["status"] == "Aktiv"]["name"].count())
+
+    #### col for total active teachers
+    with col2:
+        st.metric("Total aktive Lehrpersonen", df_no_deleted[df_no_deleted["status"] == "Aktiv"]["anzahl_aktive_lehrer"].sum())
+
+    #### col for total active students
+    with col3:
+        st.metric("Total aktive Schüler", df_no_deleted[df_no_deleted["status"] == "Aktiv"]["anzahl_aktive_schüler"].sum())
+
+    #### col for total active parents
+    with col4:
+        st.metric("Total aktive Eltern", df_no_deleted[df_no_deleted["status"] == "Aktiv"]["anzahl_aktive_eltern"].sum())
 
     #### set session_state for click to tab 3 redirect
     
@@ -88,15 +121,6 @@ with tab2:
                               ], key="Feature Analyse")
 
 
-    ###### selectbox mapping timeframes
-
-    timeframes = {
-        "Letzte 30 Tage": "_30_tage",
-        "Letzte 90 Tage": "_90_tage",
-        "Letztes Schuljahr": "_letztes_schuljahr",
-        "Gesamter Zeitraum": "_historie"
-    }
-
     searched_suffix = timeframes[selectbox]
     suitable_cols = df.columns[df.columns.str.contains(searched_suffix)]
     searchbox_cols = df[suitable_cols]
@@ -114,51 +138,92 @@ with tab2:
     bar_df_filtered = bar_df_filtered.rename(
         columns={"index": "feature", 0: "anzahl"}).sort_values("anzahl", ascending=False)
 
-    fig = px.bar(bar_df_filtered, x="feature", y="anzahl", log_y=True)
+    fig = px.bar(bar_df_filtered, x="feature", y="anzahl", log_y=True, text_auto="0,.0f")
     st.plotly_chart(fig)
-    st.write(bar_df_filtered)
+    # st.write(bar_df_filtered)
 
 with tab3:
-    ##### Initialize columns for widgets
-    col1, col2, col3, col4 ,col5 = st.columns(5)
-
+    
     options = [""] + list(df_cols["name"].unique())
     selected_school = st.selectbox("Schule suchen", options, key="Schule im Detail")
 
     if st.session_state.get("selected_name") is not None:
         name = df[df["name"] == st.session_state.get("selected_name")]
-        st.header(name.iloc[0]["name"])
+
     else:
-        name = df_cols[df_cols["name"] == selected_school]
+        name = df[df["name"] == selected_school]
+
+    if name.empty:
+        st.info("Bitte eine Schule auswählen!")
+    else: 
         st.header(name.iloc[0]["name"])
-
-
-
-    if name.iloc[0]["status"] == "Aktiv":
-        st.success("Aktiv")
-    else:
-        st.error("Nicht Aktiv")
-
-
-    with col1:
-        st.metric("Aktive Lehrer", name.iloc[0]["anzahl_aktive_lehrer"])
-
-    with col2:
-        st.metric("Aktive Schüler", name.iloc[0]["anzahl_aktive_schüler"])
-
-    with col3:
-        if pd.isna(name.iloc[0]["kuendigungsstatus"]):
-            st.metric("Kündigungsstatus", "Nicht Gekündigt")
+        if name.iloc[0]["status"] == "Aktiv":
+            st.success("Aktiv")
         else:
-            datum = name.iloc[0]["kuendigungsstatus"]
-            st.metric("Kündigungsdatum", datum.strftime("%d.%m.%Y"))
+            st.error("Nicht Aktiv")
 
-    # with col4: 
-    #     if pd.isna(name.iloc[0][""]):
-    #         pass
+        ##### Initialize columns for widgets
+        col1, col2, col3, col4 ,col5 = st.columns(5)
 
-    with col5:
-        formatted_currency = f"CHF {name.iloc[0]["anzahl_invoices_historie"]:,.2f}".replace(",", "'")
-        st.metric("Rechnungsbetrag (Historie)", formatted_currency)
-    
-    st.dataframe(name, hide_index=True)
+        with col1:
+            st.metric("Aktive Lehrer", name.iloc[0]["anzahl_aktive_lehrer"])
+
+        with col2:
+            st.metric("Aktive Schüler", name.iloc[0]["anzahl_aktive_schüler"])
+
+        with col3:
+            if pd.isna(name.iloc[0]["kuendigungsstatus"]):
+                st.metric("Kündigungsstatus", "Nicht Gekündigt")
+            else:
+                datum = name.iloc[0]["kuendigungsstatus"]
+                st.metric("Kündigungsdatum", datum.strftime("%d.%m.%Y"))
+
+        with col4: 
+            if pd.isna(name.iloc[0]["loeschstatus"]):
+                pass
+            else:
+                delete_date = name.iloc[0]["loeschstatus"]
+                st.metric("Löschdatum", delete_date.strftime("%d.%m.%Y"))
+
+        with col5:
+            formatted_currency = f"CHF {name.iloc[0]["anzahl_invoices_historie"]:,.2f}".replace(",", "'")
+            st.metric("Rechnungsbetrag (Historie)", formatted_currency)
+
+
+        
+        #### column config for tab2 table to hide non relevant cols
+        cols_to_keep = ["created_at", "joker_tage_aktiviert", "invoicing_start_date", "invoicing_cancellation_date"]
+        cols_to_drop = name.columns.difference(cols_to_keep)
+
+        #### dict to hide inrelevant cols
+
+        hide_cols = {name: None for name in cols_to_drop}
+
+        st.dataframe(name, hide_index=True, column_config=hide_cols)
+
+        #### convert data from wide format to long format
+        long_list_pattern = "_30_tage|_90_tage|_letztes_schuljahr|_historie"
+        long_name = name.columns[name.columns.str.contains(long_list_pattern)]
+        long_form = pd.melt(name, value_vars=long_name, var_name="column", value_name="Wert")
+
+        #### create suffix mapping for plotting
+        suffix_labels = {value: key for key, value in timeframes.items()}
+
+        long_form[["Feature","Zeitraum"]] = long_form["column"].apply(lambda x: pd.Series(helpers.split_cols(x, suffix_labels=suffix_labels)))
+
+
+        #### sort column order
+        right_order = list(suffix_labels.values())
+
+        # st.write(long_form)
+        agg_bar_chart = px.bar(long_form, 
+                               x="Feature", 
+                               y = "Wert", 
+                               color="Zeitraum", 
+                               barmode="group", 
+                               category_orders={"Zeitraum": right_order},
+                               text_auto=True)
+        
+        agg_bar_chart.update_traces(textposition="outside", textfont_size=16, textangle=0)
+        st.write(agg_bar_chart)
+        # st.write(long_form)

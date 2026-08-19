@@ -37,11 +37,8 @@ pipe_dict = {"30_tage": VOR_30_TAGEN_PIPE, "90_tage": VOR_90_TAGEN_PIPE, "letzte
                                                                                         # it is no longer necessary
 ###########################################################################
 
-teacher_student_pipe = [
-    {"$match": {
-        "deleted_at": {"$eq": None}
-    }},
-    {"$lookup": {
+teacher_student_pipe = [{
+    "$lookup": {
         "from": "user",
         "localField": "teachers",
         "foreignField": "_id",
@@ -70,6 +67,15 @@ teacher_student_pipe = [
                     "input": "$school_students",
                     "as": "s",
                     "cond": {"$eq": ["$$s.deleted_at", None]}
+                }
+            }
+        },
+        "anzahl_aktive_eltern": {
+            "$size": {
+                "$filter": {
+                    "input": {"$ifNull": ["$school_user", []]},
+                    "as": "u",
+                    "cond": {"$ne": ["$$u.is_deleted", True]}
                 }
             }
         },
@@ -147,8 +153,8 @@ message_pipe = [
         ]
     }
 },
-    **helpers.timeframe_fields("nachrichten", pipe_dict),
-    **helpers.timeframe_fields("chat_nachrichten", helpers.cond_cat("is_chat", True, pipe_dict))
+    **helpers.timeframe_fields("notification", pipe_dict),
+    **helpers.timeframe_fields("davon_chat_nachricht", helpers.cond_cat("is_chat", True, pipe_dict), add_anzahl_prefix=False)
     }},
     {"$lookup": {
         "from": "school",
@@ -159,14 +165,14 @@ message_pipe = [
     {"$unwind": "$school_notification"},
     {"$project": {
         "name": "$school_notification.name",
-        "anzahl_nachrichten_30_tage": 1,
-        "anzahl_nachrichten_90_tage": 1,
-        "anzahl_nachrichten_letztes_schuljahr": 1,
+        "anzahl_notification_30_tage": 1,
+        "anzahl_notification_90_tage": 1,
+        "anzahl_notification_letztes_schuljahr": 1,
         "anzahl_notification_historie": 1,
-        "anzahl_chat_nachrichten_30_tage": 1,
-        "anzahl_chat_nachrichten_90_tage": 1,
-        "anzahl_chat_nachrichten_letztes_schuljahr": 1,
-        "anzahl_chat_nachrichten_historie": 1,
+        "davon_chat_nachricht_30_tage": 1,
+        "davon_chat_nachricht_90_tage": 1,
+        "davon_chat_nachricht_letztes_schuljahr": 1,
+        "davon_chat_nachricht_historie": 1,
         "_id": 1
     }}
 
@@ -225,19 +231,19 @@ event_pipe_event = [
 event_pipe_category = [{
     "$group": {
         "_id": "$school",
-        "event_event_historie": {
+        "anzahl_event_event_historie": {
             "$sum": {
                 "$cond": [{"$eq": ["$event_category", "event"]}, 1, 0]}
         },
-        "holiday_event_historie": {
+        "anzahl_holiday_event_historie": {
             "$sum": {
                 "$cond": [{"$eq": ["$event_category", "holiday"]}, 1,0]}
         },
-        "task_event_historie": {
+        "anzahl_task_event_historie": {
             "$sum": {
                 "$cond": [{"$eq": ["$event_category", "task"]}, 1, 0]}
         },
-        "test_event_historie": {
+        "anzahl_test_event_historie": {
             "$sum": {
                 "$cond": [{"$eq": ["$event_category", "test"]}, 1, 0]}
         },
@@ -253,7 +259,7 @@ event_pipe_category = [{
 file_pipe = [
     {"$group": {
         "_id": "$school",
-        "anzahl_dateien_historie": {"$sum": 1},
+        "anzahl_files_historie": {"$sum": 1},
         **helpers.timeframe_fields("files", pipe_dict)
     }},
     {"$lookup": {
@@ -267,7 +273,7 @@ file_pipe = [
         "anzahl_files_30_tage": 1,
         "anzahl_files_90_tage": 1,
         "anzahl_files_letztes_schuljahr": 1,
-        "anzahl_dateien_historie": 1,
+        "anzahl_files_historie": 1,
         "_id": 1
     }}
 ]

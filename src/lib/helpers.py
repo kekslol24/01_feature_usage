@@ -24,16 +24,17 @@ def merge_alle(dataframes, on, how):
     return result
 
 
-def timeframe_fields(pre_fix, conditions, is_money=False):
+def timeframe_fields(pre_fix, conditions, is_money=False, add_anzahl_prefix=True):
     '''Takes prefix and conditions, returns fields for pipeline.py'''
     fields = {}
+    anzahl = "anzahl_" if add_anzahl_prefix else ""
     if is_money:
         for suffix, condition in conditions.items():
-            fieldname = f"anzahl_{pre_fix}_{suffix}"
+            fieldname = f"{anzahl}{pre_fix}_{suffix}"
             fields[fieldname] = {"$sum": {"$cond": [condition, "$amount", 0]}}
     else:
         for suffix, condition in conditions.items():
-            fieldname = f"anzahl_{pre_fix}_{suffix}"
+            fieldname = f"{anzahl}{pre_fix}_{suffix}"
             fields[fieldname] = {"$sum": {"$cond": [condition, 1, 0]}}
     return fields
 
@@ -46,6 +47,13 @@ def cond_cat(extra_field, extra_value, pipe_dict):
         result[suffix] =  {"$and": [condition, {"$eq": [f"${extra_field}", extra_value]}  ]}
     return result
 
+def split_cols(col_name, suffix_labels):
+    '''Takes in a col name and looks if it ends with the suffix, it then strips everything in front of the suffix and returns the feature and label.'''
+    for suffix, label in suffix_labels.items():
+        if col_name.endswith(suffix):
+            feature = col_name[:-len(suffix)]
+            return feature, label
+    return col_name, None
 
 exception_cols = [
     "name", 
@@ -57,3 +65,4 @@ exception_cols = [
     "invoicing_start_date",
     "invoicing_cancellation_date"
     ]
+

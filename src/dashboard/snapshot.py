@@ -37,7 +37,7 @@ def main():
     ### convert non standardized datetimes to datetime
     merged["invoicing_start_date"] = pd.to_datetime(merged["invoicing_start_date"], errors="coerce", utc=True)
     merged["invoicing_cancellation_date"] = pd.to_datetime(merged["invoicing_cancellation_date"], errors="coerce", utc=True)
-
+    
     ### generate snapshot
     merged.to_parquet("data/snapshot.parquet", index=False)
 
