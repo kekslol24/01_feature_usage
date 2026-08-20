@@ -28,12 +28,13 @@ else:
 # LETZTES_SCHULJAHR_ENDE = datetime(datetime.now().year, 7, 20)
 LETZTES_SCHULJAHR_PIPE = {"$and": [{"$gte": ["$created_at", LETZTES_SCHULJAHR_START]}, {"$lte": ["$created_at", LETZTES_SCHULJAHR_ENDE]}]}
 ###########################################################################
-pipe_dict = {"30_tage": VOR_30_TAGEN_PIPE, "90_tage": VOR_90_TAGEN_PIPE, "letztes_schuljahr": LETZTES_SCHULJAHR_PIPE}
+pipe_dict_created_at = helpers.build_pipe_dict("created_at", VOR_30_TAGEN, VOR_90_TAGEN, LETZTES_SCHULJAHR_START, LETZTES_SCHULJAHR_ENDE)
+pipe_dict_date = helpers.build_pipe_dict("date", VOR_30_TAGEN, VOR_90_TAGEN, LETZTES_SCHULJAHR_START, LETZTES_SCHULJAHR_ENDE)
 
-# chat_pipe_dict = {}
+# chat_pipe_dict_created_at = {}
 
-# for suffix, condition in pipe_dict.items():
-#     chat_pipe_dict[suffix] = {"$and": [condition, {"$eq": ["$is_chat", True]}]}      ----> because we append new values to the pipe_dict
+# for suffix, condition in pipe_dict_created_at.items():
+#     chat_pipe_dict_created_at[suffix] = {"$and": [condition, {"$eq": ["$is_chat", True]}]}      ----> because we append new values to the pipe_dict_created_at
                                                                                         # it is no longer necessary
 ###########################################################################
 
@@ -72,10 +73,24 @@ teacher_student_pipe = [{
         },
         "anzahl_aktive_eltern": {
             "$size": {
-                "$filter": {
-                    "input": {"$ifNull": ["$school_user", []]},
-                    "as": "u",
-                    "cond": {"$ne": ["$$u.is_deleted", True]}
+                "$setUnion": {
+                    "$reduce": {
+                        "input": {
+                            "$map": {
+                                "input": {
+                                    "$filter": {
+                                        "input": "$school_students",
+                                        "as": "s",
+                                        "cond": {"$eq": ["$$s.deleted_at", None]}
+                                    }
+                                },
+                                "as": "s",
+                                "in": "$$s.parents"
+                            }
+                        },
+                        "initialValue": [],
+                        "in": {"$concatArrays": ["$$value", "$$this"]}
+                    }
                 }
             }
         },
@@ -104,8 +119,8 @@ absence_pipe = [
                 ]
             }
         },
-        **helpers.timeframe_fields("absenz", pipe_dict),
-        **helpers.timeframe_fields("joker_tage", pipe_dict)
+        **helpers.timeframe_fields("absenz", pipe_dict_created_at),
+        **helpers.timeframe_fields("joker_tage",helpers.cond_cat("is_joker_day", True, pipe_dict_created_at))
     }},
     {"$lookup": {
         "from": "school",
@@ -128,6 +143,9 @@ absence_pipe = [
         "anzahl_absenz_90_tage": 1,
         "anzahl_absenz_letztes_schuljahr": 1,
         "anzahl_absenz_historie": 1,
+        "anzahl_joker_tage_30_tage": 1,
+        "anzahl_joker_tage_90_tage": 1,
+        "anzahl_joker_tage_letztes_schuljahr": 1,
         "anzahl_joker_tage_historie": 1,
         "_id": 1
     # }},
@@ -153,8 +171,8 @@ message_pipe = [
         ]
     }
 },
-    **helpers.timeframe_fields("notification", pipe_dict),
-    **helpers.timeframe_fields("davon_chat_nachricht", helpers.cond_cat("is_chat", True, pipe_dict), add_anzahl_prefix=False)
+    **helpers.timeframe_fields("notification", pipe_dict_created_at),
+    **helpers.timeframe_fields("davon_chat_nachricht", helpers.cond_cat("is_chat", True, pipe_dict_created_at), add_anzahl_prefix=False)
     }},
     {"$lookup": {
         "from": "school",
@@ -185,7 +203,7 @@ event_pipe_meet = [
     {"$group": {
         "_id": "$school",
         "anzahl_meetings_historie": {"$sum": 1},
-        **helpers.timeframe_fields("meetings", pipe_dict)
+        **helpers.timeframe_fields("meetings", pipe_dict_created_at)
     }},
     {"$lookup": {
         "from": "school",
@@ -210,7 +228,7 @@ event_pipe_event = [
     {"$group": {
         "_id": "$school",
         "anzahl_events_historie": {"$sum": 1},
-        **helpers.timeframe_fields("events", pipe_dict)
+        **helpers.timeframe_fields("events", pipe_dict_created_at)
     }},
     {"$lookup": {
         "from": "school",
@@ -247,10 +265,10 @@ event_pipe_category = [{
             "$sum": {
                 "$cond": [{"$eq": ["$event_category", "test"]}, 1, 0]}
         },
-        **helpers.timeframe_fields("event_event", helpers.cond_cat("event_category", "event", pipe_dict)),
-        **helpers.timeframe_fields("holiday_event", helpers.cond_cat("event_category", "holiday", pipe_dict)),
-        **helpers.timeframe_fields("task_event", helpers.cond_cat("event_category", "task", pipe_dict)),
-        **helpers.timeframe_fields("test_event", helpers.cond_cat("event_category", "test", pipe_dict))
+        **helpers.timeframe_fields("event_event", helpers.cond_cat("event_category", "event", pipe_dict_created_at)),
+        **helpers.timeframe_fields("holiday_event", helpers.cond_cat("event_category", "holiday", pipe_dict_created_at)),
+        **helpers.timeframe_fields("task_event", helpers.cond_cat("event_category", "task", pipe_dict_created_at)),
+        **helpers.timeframe_fields("test_event", helpers.cond_cat("event_category", "test", pipe_dict_created_at))
         }
     }
 ]
@@ -260,7 +278,7 @@ file_pipe = [
     {"$group": {
         "_id": "$school",
         "anzahl_files_historie": {"$sum": 1},
-        **helpers.timeframe_fields("files", pipe_dict)
+        **helpers.timeframe_fields("files", pipe_dict_created_at)
     }},
     {"$lookup": {
         "from": "school",
@@ -282,7 +300,7 @@ question_pipe = [
     {"$group": {
         "_id": "$school",
         "anzahl_questions_historie": {"$sum": 1},
-        **helpers.timeframe_fields("questions", pipe_dict)
+        **helpers.timeframe_fields("questions", pipe_dict_created_at)
     }},
     {"$lookup": {
         "from": "school",
@@ -323,10 +341,11 @@ status_pipe = [{
 ]
 
 money_pipe = [{
-    "$group": {
-        "_id": "$school_id",
-        "anzahl_invoices_historie": {"$sum": "$amount"},
-        **helpers.timeframe_fields("invoices", pipe_dict, is_money=True)
+    "$unwind": "$price_data"},
+    {"$group": {
+        "_id": "$price_data.school",
+        "anzahl_invoices_historie": {"$sum": "$price_data.amount_invoiced"},
+        **helpers.timeframe_fields("invoices", pipe_dict_date, is_money=True)
     }},
     {"$lookup": {
         "from": "school",
@@ -347,6 +366,64 @@ money_pipe = [{
     }
 }]
 
+price_data_pipe = [
+    {"$unwind": "$price_data"},
+    {"$match": {
+        "$expr": {"$ne": ["$price_data.school", "$school_id"]}
+    }},
+    {"$lookup": {
+        "from": "school",
+        "foreignField": "_id",
+        "localField": "price_data.school",
+        "as": "toechter_name"
+    }},
+    {"$unwind": "$toechter_name"},
+
+    {"$facet": {
+        "toechter_zu_mutter": [
+            {"$group": {
+                "_id": "$price_data.school",
+                "mutterschule_id": {"$first": "$school_id"}
+            }},
+            {"$lookup": {
+                "from": "school",
+                "localField": "mutterschule_id",
+                "foreignField": "_id",
+                "as": "mother_school"
+            }},
+            {"$unwind": "$mother_school"},
+            {"$project": {
+                "mother_school_name": "$mother_school.name"
+            }}
+        ],
+        "mutter_zu_toechter": [
+            {"$group": {
+                "_id": "$price_data.school",
+                "mutterschule_id": {"$first": "$school_id"},
+                "daughter_name": {"$first": "$toechter_name"},
+                "toechter_betrag": {"$sum": "$price_data.amount_invoiced"}
+            }},
+            {"$group": {
+                "_id": "$mutterschule_id",
+                "anzahl_toechter": {"$sum": 1},
+                "toechter_details": {"$push": {"name": "$daughter_name.name", "betrag": "$toechter_betrag"}}
+            }},
+            {"$lookup": {
+                "from": "school",
+                "localField": "_id",
+                "foreignField": "_id",
+                "as": "mother_school"
+            }},
+            {"$unwind": "$mother_school"},
+            {"$project": {
+                "mother_school_name": "$mother_school.name",
+                "anzahl_toechter": 1,
+                "toechter_details": 1
+            }}
+        ]
+    }}
+]
+
 
 #################################################
 # Pipeline list
@@ -363,3 +440,7 @@ pipeline_list = [
     (status_pipe, "school"),
     (money_pipe, "invoices")
     ]
+
+invoice_list = [
+    (price_data_pipe, "invoices")
+]

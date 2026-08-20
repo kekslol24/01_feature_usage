@@ -55,7 +55,20 @@ def split_cols(col_name, suffix_labels):
             return feature, label
     return col_name, None
 
+def build_pipe_dict(field_name, vor_30_tagen, vor_90_tagen, letztes_schuljahr_start, letztes_schuljahr_ende):
+    return {
+        "30_tage": {"$gte": [f"${field_name}", vor_30_tagen]},
+        "90_tage": {"$gte": [f"${field_name}", vor_90_tagen]},
+        "letztes_schuljahr": {
+            "$and": [
+                {"$gte": [f"${field_name}", letztes_schuljahr_start]},
+                {"$lte": [f"${field_name}", letztes_schuljahr_ende]}
+            ]
+        }
+    }
+
 exception_cols = [
+    "_id",
     "name", 
     "joker_tage_aktiviert", 
     "created_at", 
@@ -63,6 +76,6 @@ exception_cols = [
     "kuendigungsstatus", 
     "status",
     "invoicing_start_date",
-    "invoicing_cancellation_date"
+    "invoicing_cancellation_date",
     ]
 

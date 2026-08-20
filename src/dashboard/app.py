@@ -15,6 +15,9 @@ LOGO = "logo/klapp_logo.png"
 
 ###### Read in parquet 
 df = pd.read_parquet("../../data/snapshot.parquet")
+df_invoice = pd.read_json("../../data/mother_daughter.json")
+
+
 
 df["created_at"] = df["created_at"].dt.date
 df["kuendigungsstatus"] = df["kuendigungsstatus"].dt.date
@@ -162,6 +165,14 @@ with tab3:
         else:
             st.error("Nicht Aktiv")
 
+
+        ##### TODO: FIX HIT MASK
+        hit = df_invoice[df_invoice["_id"] == name.iloc[0]["_id"]]
+
+        if hit.empty:
+            st.write[name.iloc[0][hit]]
+
+
         ##### Initialize columns for widgets
         col1, col2, col3, col4 ,col5 = st.columns(5)
 
@@ -226,4 +237,6 @@ with tab3:
         
         agg_bar_chart.update_traces(textposition="outside", textfont_size=16, textangle=0)
         st.write(agg_bar_chart)
+
+        st.write(df_invoice)
         # st.write(long_form)
