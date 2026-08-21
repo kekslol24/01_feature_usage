@@ -4,7 +4,7 @@ Data pipeline and Streamlit dashboard for analyzing school-level feature usage f
 
 ## Suggested repository description
 
-Feature usage analytics for schools with MongoDB aggregation pipelines and a Streamlit dashboard.
+School-level feature usage analytics powered by MongoDB aggregation pipelines and a Streamlit dashboard.
 
 ## Repository structure
 
