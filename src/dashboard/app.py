@@ -18,7 +18,7 @@ df = pd.read_parquet("../../data/snapshot.parquet")
 df_invoice = pd.read_json("../../data/mother_daughter.json")
 
 
-
+##### convert datetimes to only display date to remove redundancy
 df["created_at"] = df["created_at"].dt.date
 df["kuendigungsstatus"] = df["kuendigungsstatus"].dt.date
 df["loeschstatus"] = df["loeschstatus"].dt.date
@@ -99,20 +99,20 @@ with tab1:
     merged_col = pd.Index.union(historie_col, non_relevant_cols)
     overview_col = merged_col.union(removed_cols)
 
-    txt_input = st.text_input(label="Suchfeld",  key="Gesamtübersicht")
+    txt_input = st.text_input(label="Suchfeld",  key="Gesamtübersicht", on_change=helpers.switch_school_tab1)
     filtered = df[df["name"].str.contains(txt_input, case=False)]
     df_cols = filtered[spalten_reihenfolge]
     
     # st.multiselect()
-
-    #### logic to set session_state to selected name in overview, of not selected return none so it resets
-    event = st.dataframe(df_cols, on_select="rerun", selection_mode="single-row", hide_index=True)
-    if event["selection"]["rows"]:
-        zeilen_index = event["selection"]["rows"][0]
-        selected_name = df_cols.iloc[zeilen_index]["name"]
-        st.session_state["selected_name"] = selected_name
-    else:
-        st.session_state["selected_name"] = None
+    
+    #### logic to set session_state to selected name in overview, if not selected return none so it resets
+    event = st.dataframe(
+        df_cols, 
+        on_select=lambda: helpers.switch_school_uebersicht(df_cols), 
+        selection_mode="single-row", 
+        hide_index=True, 
+        key="Gesamtübersicht_tabelle",
+        )
 
 with tab2:
 
@@ -148,13 +148,15 @@ with tab2:
 with tab3:
     
     options = [""] + list(df_cols["name"].unique())
-    selected_school = st.selectbox("Schule suchen", options, key="Schule im Detail")
+    selected_school = st.selectbox("Schule suchen", options, key="Schule im Detail", on_change=helpers.switch_school_dropdown)
 
-    if st.session_state.get("selected_name") is not None:
+    selected_name = st.session_state.get("selected_name")
+
+    if selected_name is None:
+        name = df[df["name"] == selected_school]
+    else: 
         name = df[df["name"] == st.session_state.get("selected_name")]
 
-    else:
-        name = df[df["name"] == selected_school]
 
     if name.empty:
         st.info("Bitte eine Schule auswählen!")
@@ -164,15 +166,7 @@ with tab3:
             st.success("Aktiv")
         else:
             st.error("Nicht Aktiv")
-
-
-        ##### TODO: FIX HIT MASK
-        hit = df_invoice[df_invoice["_id"] == name.iloc[0]["_id"]]
-
-        if hit.empty:
-            st.write[name.iloc[0][hit]]
-
-
+        # st.write(f"DEBUG: selected_name={st.session_state.get('selected_name')}, name ist leer={name.empty}")
         ##### Initialize columns for widgets
         col1, col2, col3, col4 ,col5 = st.columns(5)
 
@@ -196,12 +190,39 @@ with tab3:
                 delete_date = name.iloc[0]["loeschstatus"]
                 st.metric("Löschdatum", delete_date.strftime("%d.%m.%Y"))
 
+
         with col5:
+            #### define hit for the json where id's match
+            hit = df_invoice[df_invoice["_id"] == name.iloc[0]["_id"]]
+
             formatted_currency = f"CHF {name.iloc[0]["anzahl_invoices_historie"]:,.2f}".replace(",", "'")
             st.metric("Rechnungsbetrag (Historie)", formatted_currency)
 
+            
+            if hit.empty:
+                pass
+            else:
+                school = None
+                if hit.iloc[0]["toechter_details"] is None:
+                   school = st.selectbox("Tochterschule von:", ["", hit.iloc[0]["mother_school_name"]], key="mutter_auswahl", on_change=helpers.switch_school_mutter)
+                else:   
+                    if len(hit["toechter_details"].iloc[0]) == 1:
+                        select = ["", hit.iloc[0]["toechter_details"][0]["name"]]
+                        school = st.selectbox("Mutterschule von: ", select, key="mutter_auswahl", on_change=helpers.switch_school_mutter)
+                    else:
+                        select = [""]
+                        for objekt in hit["toechter_details"].iloc[0]:
+                            select.append(objekt["name"])
+                        school = st.selectbox("Mutterschule von: ", select, key="mutter_auswahl", on_change=helpers.switch_school_mutter)
 
-        
+                if school:
+                    st.session_state["selected_name"] = school
+                    # st.session_state["mutter_auswahl"] = ""
+                    # st.write(f"DEBUG: school={school}, selected_name vorher={st.session_state.get('selected_name')}")
+                    st.rerun()
+                    
+        # st.write(type(hit.iloc[0]["toechter_details"][0]["name"]))
+        # st.dataframe(df_invoice)
         #### column config for tab2 table to hide non relevant cols
         cols_to_keep = ["created_at", "joker_tage_aktiviert", "invoicing_start_date", "invoicing_cancellation_date"]
         cols_to_drop = name.columns.difference(cols_to_keep)
@@ -238,5 +259,5 @@ with tab3:
         agg_bar_chart.update_traces(textposition="outside", textfont_size=16, textangle=0)
         st.write(agg_bar_chart)
 
-        st.write(df_invoice)
+        # st.write(df_invoice)
         # st.write(long_form)

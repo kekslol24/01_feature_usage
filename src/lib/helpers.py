@@ -67,6 +67,33 @@ def build_pipe_dict(field_name, vor_30_tagen, vor_90_tagen, letztes_schuljahr_st
         }
     }
 
+
+def switch_school_mutter():
+    gewaehlt = st.session_state["mutter_auswahl"]
+    # st.write(f"DEBUG Callback: gewaehlt={gewaehlt}")
+    if gewaehlt:
+        st.session_state["selected_name"] = gewaehlt
+    st.session_state["mutter_auswahl"] = ""
+
+def switch_school_tab1():
+    gewaehlt = st.session_state["Gesamtübersicht"]
+    # st.write(f"DEBUG Callback: gewaehlt={gewaehlt}")
+    if gewaehlt:
+        st.session_state["selected_name"] = gewaehlt
+
+def switch_school_uebersicht(df):
+    auswahl = st.session_state["Gesamtübersicht_tabelle"]
+    if auswahl["selection"]["rows"]:
+        zeilen_index = auswahl["selection"]["rows"][0]
+        selected_name = df.iloc[zeilen_index]["name"]
+        st.session_state["selected_name"] = selected_name
+
+def switch_school_dropdown():
+    selection = st.session_state["Schule im Detail"]
+    if selection:
+        st.session_state["selected_name"] = selection
+    st.session_state["Schule im Detail"] = ""
+
 exception_cols = [
     "_id",
     "name", 
